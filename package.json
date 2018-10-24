@@ -1,0 +1,19 @@
+{
+  "name": "camjs",
+  "version": "0.0.1",
+  "description": "SACN->Panasonic PTZ control ",
+  "main": "index.js",
+  "directories": {
+    "example": "examples",
+    "lib": "lib",
+    "test": "test"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Daniel Meltzer <dmeltzer.devel@gmail.com>",
+  "license": "MIT",
+  "dependencies": {
+    "e131": "^1.1.1"
+  }
+}
