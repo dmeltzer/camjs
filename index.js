@@ -2,7 +2,6 @@ var e131 = require('e131')
 
 var _ = require('underscore');
 
-var rateLimit = require('function-rate-limit');
 let axios = require('axios');
 var server = new e131.Server({
   universes: [1],
@@ -20,30 +19,43 @@ class Camera {
   constructor(ip, startAddress) {
     this.ip = ip;
     this.startAddress = startAddress;
+    this.pan = [0,0];
+    this.tilt = [0,0];
+    this.ptTimeout = false;
+
+    this.timerCount = setInterval(function() {this.clearTimers()}.bind(this), 130);
   }
 
   get startAddress() {
     return this.dmxAddress;
   }
 
+  clearTimers() {
+    this.timeOut = false;
+  }
   set startAddress(address) {
     this.dmxAddress = address;
   }
   updatePosition(data) {
-    // console.log(data);
-    // [this.pan,this.tilt,this.zoom,this.focus,this.iris] = data;
-    let newPan = data[0];
-    let newTilt = data[1];
-    let newZoom = data[2];
-    let newFocus = data[3];
-    let newIris = data[4];
+    if(this.timeOut) {
+      return;
+    }
+    this.timeOut = true;
+    let newPan = [data[0],data[1]];
+    let newTilt = [data[2],data[3]];
+    let newZoom = data[4];
+    let newFocus = data[5];
+    let newIris = data[6];
 
-    
-    if(this.pan != newPan || this.tilt != newTilt) {
+    if(this.pan[0] != newPan[0]
+      || this.pan[1] != newPan[1]
+      || this.tilt[0] != newTilt[0]
+      || this.tilt[1] != newTilt[1])
+        {
       this.pan = newPan;
       this.tilt = newTilt;
-    console.log(newPan);
-      this.generatePanTiltUrl();
+      console.log(newPan);
+      this.generatePanTiltUrl(),1300,true;
     }
 
     if (this.zoom != newZoom) {
@@ -59,10 +71,10 @@ class Camera {
       this.generateIrisUrl();
     }
   }
-
+ 
 
   generatePanTiltUrl() {
-    this.generateUrl(Camera.PTCOMMAND, this.pan, this.tilt);
+    this.generateUrl(Camera.PTCOMMAND, this.convertTo16Bit(this.pan), this.convertTo16Bit(this.tilt));
   }
   generateFocusUrl() {
     this.generateUrl(Camera.FOCUSCMD, this.focus);
@@ -74,13 +86,18 @@ class Camera {
     this.generateUrl(Camera.IRISCMD, this.iris);
   }
   generateUrl(commandType, value1, value2 = null) {
+    console.log(value1);
     let commandString = commandType.replace('%1', this.toHex(value1))
     
     if(value2 != null)
       commandString = commandString.replace('%2', this.toHex(value2));
     let url = Camera.urlScheme.replace('{CAMERA_IP}', this.ip).replace('{COMMAND}', commandString);
-    // console.log("Would hit this URL: " +url);
+    console.log("Would hit this URL: " +url);
     this.sendHTTP(url);
+  }
+
+  convertTo16Bit(values) {
+    return ((( values[0] & 0xff ) << 8) | (values[1] & 0xff));
   }
 
   async sendHTTP(url) {
@@ -93,17 +110,14 @@ class Camera {
   }
 
   toHex(d) {
-    return  ("0"+(Number(d).toString(16))).slice(-2).toUpperCase()
+    if(d==255)
+      return  ("0"+(Number(d).toString(16))).slice(-2).toUpperCase()
+    return  ("0000"+(Number(d).toString(16))).slice(-4).toUpperCase()
+
   }
 
 }
 
-Camera.command_updates = [
-  'pantilt',
-  'zoom',
-  'focus',
-  'iris'
-];
 Camera.urlScheme = "http://{CAMERA_IP}/cgi-bin/aw_ptz?cmd={COMMAND}&res=1"
 Camera.PTCOMMAND = "#APC%1%2"
 Camera.ZOOMCOMMAND = "#AXZ%1"
@@ -116,22 +130,14 @@ server.on('listening', function() {
   console.log('server listening on port %d, universes %j', this.port, this.universes);
   cameraIPS.forEach((camera) => {
     cameras.push(new Camera(camera.ip, camera.startAddress));
-    // console.dir(cameras);
-});
+  });
 });
 server.on('packet', function (packet) {
   var sourceName = packet.getSourceName();
   var sequenceNumber = packet.getSequenceNumber();
   var universe = packet.getUniverse();
   var slotsData = packet.getSlotsData();
-  console.log('Packet');
-
-  limitedCameraUpdates(slotsData);
-    
-});
- 
-var limitedCameraUpdates = rateLimit(1,140,function(slotsData) {
   cameras.forEach((camera) => {
-    camera.updatePosition(slotsData.slice(camera.startAddress-1,camera.startAddress+4));
+    camera.updatePosition(slotsData.slice(camera.startAddress-1,camera.startAddress+6));
   });
 });
