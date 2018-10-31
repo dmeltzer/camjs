@@ -4,13 +4,14 @@ var _ = require('underscore');
 
 let axios = require('axios');
 var server = new e131.Server({
-  universes: [1],
-  ip: '192.168.100.121'
+  universe: 1,
+  port: 5568,
+  ip: '10.200.60.81'
 });
 
 var cameraIPS = [
   {
-    'ip': '10.200.34.101',
+    'ip': '10.200.36.104',
     'startAddress': 1
   }
 ]
@@ -77,43 +78,52 @@ class Camera {
     this.generateUrl(Camera.PTCOMMAND, this.convertTo16Bit(this.pan), this.convertTo16Bit(this.tilt));
   }
   generateFocusUrl() {
-    this.generateUrl(Camera.FOCUSCMD, this.focus);
+    this.generateUrl(Camera.FOCUSCMD, this.clampToStrangeHex(this.focus));
   }
   generateZoomUrl() {
-    this.generateUrl(Camera.ZOOMCOMMAND, this.zoom);
+    this.generateUrl(Camera.ZOOMCOMMAND, this.clampToStrangeHex(this.zoom));
   }
   generateIrisUrl() {
-    this.generateUrl(Camera.IRISCMD, this.iris);
+    this.generateUrl(Camera.IRISCMD, this.clampToStrangeHex(this.iris));
   }
   generateUrl(commandType, value1, value2 = null) {
     console.log(value1);
-    let commandString = commandType.replace('%1', this.toHex(value1))
-    
+    let commandString = commandType.replace('%1', value1)
+
     if(value2 != null)
-      commandString = commandString.replace('%2', this.toHex(value2));
+      commandString = commandString.replace('%2', value2);
+  commandString = encodeURIComponent(commandString);
     let url = Camera.urlScheme.replace('{CAMERA_IP}', this.ip).replace('{COMMAND}', commandString);
     console.log("Would hit this URL: " +url);
     this.sendHTTP(url);
   }
 
   convertTo16Bit(values) {
-    return ((( values[0] & 0xff ) << 8) | (values[1] & 0xff));
+    return this.toHex(((( values[0] & 0xff ) << 8) | (values[1] & 0xff)));
   }
 
+  clampToStrangeHex(value) {
+    value = (value+1) * 16;
+    if( value < 1365)
+        value = 1365;
+    if( value > 4096)
+        value = 4096;
+    console.log("strange hex is" +value);
+    return  ("000"+(Number(value).toString(16))).slice(-3).toUpperCase()
+
+  }
   async sendHTTP(url) {
     try {
-      const response = await axios.get(url);
-      console.log(response);
+     const response = await axios.get(url);
+	// const response = "dummy";
+      // console.log(response);
     } catch (error) {
       console.error(error);
     }
   }
 
   toHex(d) {
-    if(d==255)
-      return  ("0"+(Number(d).toString(16))).slice(-2).toUpperCase()
     return  ("0000"+(Number(d).toString(16))).slice(-4).toUpperCase()
-
   }
 
 }
@@ -122,7 +132,7 @@ Camera.urlScheme = "http://{CAMERA_IP}/cgi-bin/aw_ptz?cmd={COMMAND}&res=1"
 Camera.PTCOMMAND = "#APC%1%2"
 Camera.ZOOMCOMMAND = "#AXZ%1"
 Camera.FOCUSCMD = "#AXF%1"
-Camera.IRISCMD = "#I%1"
+Camera.IRISCMD = "#AXI%1"
 
 var cameras = Array();
 // this.parseSACNData();
